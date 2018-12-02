@@ -60,7 +60,11 @@ MODULE_LICENSE("GPLv2");
 #define DT2W_FEATHER		200
 #define DT2W_TIME		700
 
+#define VIB_STRENGTH            40
+
 /* Resources */
+extern void set_vibrate(int value);
+static int dt2w_vib_strength = VIB_STRENGTH;
 int dt2w_switch = DT2W_DEFAULT;
 static cputime64_t tap_time_pre = 0;
 static int touch_x = 0, touch_y = 0, touch_nr = 0, x_pre = 0, y_pre = 0;
@@ -144,16 +148,17 @@ static void detect_doubletap2wake(int x, int y, bool st)
                 x, y, (single_touch) ? "true" : "false");
 #endif
 	if ((single_touch) && (dt2w_switch > 0) && (exec_count) && (touch_cnt)) {
-		
+
 		if ((ktime_to_ms(ktime_get())-tap_time_pre) >= DT2W_TIME)
 			doubletap2wake_reset();
-		
+
 		if (touch_nr == 0) {
 			new_touch(x, y);
 		} else if (touch_nr == 1) {
 			if ((calc_feather(x, x_pre) < DT2W_FEATHER) &&
 			    (calc_feather(y, y_pre) < DT2W_FEATHER)) {
 				pr_info(LOGTAG"ON\n");
+				set_vibrate(dt2w_vib_strength);
 				exec_count = false;
 				doubletap2wake_pwrtrigger();
 				doubletap2wake_reset();
@@ -305,6 +310,35 @@ static ssize_t dt2w_doubletap2wake_dump(struct device *dev,
 static DEVICE_ATTR(doubletap2wake, (S_IWUSR|S_IRUGO),
 	dt2w_doubletap2wake_show, dt2w_doubletap2wake_dump);
 
+static ssize_t dt2w_vib_strength_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t count = 0;
+
+	count += sprintf(buf, "%d\n", dt2w_vib_strength);
+
+	return count;
+}
+
+static ssize_t dt2w_vib_strength_dump(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int new_dt2w_vib;
+
+	if (!sscanf(buf, "%du", &new_dt2w_vib))
+		return -EINVAL;
+
+	if (new_dt2w_vib == dt2w_vib_strength)
+		return count;
+
+	dt2w_vib_strength = new_dt2w_vib;
+
+	return count;
+}
+
+static DEVICE_ATTR(doubletap2wake_vibstrength, (S_IWUSR|S_IRUGO),
+	dt2w_vib_strength_show, dt2w_vib_strength_dump);
+
 static ssize_t dt2w_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -377,6 +411,11 @@ static int __init doubletap2wake_init(void)
 	rc = sysfs_create_file(android_touch_kobj, &dev_attr_doubletap2wake_version.attr);
 	if (rc) {
 		pr_warn("%s: sysfs_create_file failed for doubletap2wake_version\n", __func__);
+	}
+
+	rc = sysfs_create_file(android_touch_kobj, &dev_attr_doubletap2wake_vibstrength.attr);
+	if (rc) {
+		pr_warn("%s: sysfs_create_file failed for doubletap2wake_vibstrength\n", __func__);
 	}
 
 err_input_dev:
